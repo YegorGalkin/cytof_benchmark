@@ -16,10 +16,10 @@ def get_config():
 
     config.kld_weight = 0.0025
 
-
+    config.loss_type = 'beta'
 
     # Optimizer and runner parameters
-    config.learning_rate = 0.005
+    config.learning_rate = 0.05
     config.weight_decay = 0.0
     config.epochs = 10000
     config.save_loss_every_n_epochs = 25

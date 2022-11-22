@@ -1,3 +1,4 @@
+import datetime
 import os.path
 from glob import glob
 import torch
@@ -6,14 +7,12 @@ from torch import optim
 from torch.optim import lr_scheduler
 from tqdm import tqdm
 from datasets import OrganoidDataset, CellType
-from models import VanillaVAE, WAE_MMD
-from models.types_ import *
+from models import BetaVAE, WAE_MMD
 import pandas as pd
 import seaborn as sns
 import matplotlib
 import matplotlib.pyplot as plt
 from absl import app
-from absl import flags
 from ml_collections.config_flags import config_flags
 
 matplotlib.use('Agg')
@@ -24,7 +23,6 @@ _CONFIG = config_flags.DEFINE_config_file('config')
 
 def main(_):
     config = _CONFIG.value
-    seed_everything(config.seed)
 
     print(f"CUDA available:{torch.cuda.is_available()}")
 
@@ -33,8 +31,10 @@ def main(_):
     else:
         return
 
+    seed_everything(config.seed)
+
     if config.model == 'VAE':
-        model = VanillaVAE(config=config).to(config.device)
+        model = BetaVAE(config=config).to(config.device)
     elif config.model == "WAE_MMD":
         model = WAE_MMD(config=config).to(config.device)
     else:
@@ -55,6 +55,7 @@ def main(_):
                                         steps_per_epoch=len(X_train_batches),
                                         epochs=config.epochs)
     loss_list = list()
+    start_time = datetime.datetime.now()
     for epoch in tqdm(range(1, config.epochs + 1)):
         for X_batch in X_train_batches:
             optimizer.zero_grad()
@@ -88,7 +89,9 @@ def main(_):
                 mean_val_loss = {'val_' + key: sum(d['val_' + key] for d in val_losses) / X_val.shape[0] for key in loss_val.keys()}
                 loss_list.append({'epoch': epoch} | mean_train_loss | mean_val_loss)
 
-    print('Finished Training')
+    print(f'Memory allocated:{torch.cuda.memory_allocated()}')
+    print(f'Max memory allocated:{torch.cuda.max_memory_allocated()}')
+    print(f'Finished Training in {(datetime.datetime.now()-start_time)}')
 
     run_dirs = glob(os.path.join(config.output_dir, 'run_*'))
     max_run = max([int(os.path.basename(run_dir).split('_')[1]) for run_dir in run_dirs]) if run_dirs else 0
@@ -97,6 +100,13 @@ def main(_):
 
     pd.DataFrame(loss_list).to_csv(os.path.join(save_dir, 'loss_curve.csv'), index=None)
     torch.save(model.state_dict(), os.path.join(save_dir, 'model.pth'))
+
+    with open(os.path.join(save_dir, 'summary.txt'), 'w') as f:
+        print(f'memory,{torch.cuda.memory_allocated()}', file=f)
+        print(f'max_memory,{torch.cuda.max_memory_allocated()}', file=f)
+        print(f'time,{(datetime.datetime.now()-start_time).seconds}', file=f)
+        print(f'time_str,{(datetime.datetime.now() - start_time)}', file=f)
+        print('val_mse,{}'.format(pd.DataFrame(loss_list)['val_MSE'].iat[-1]), file=f)
 
     with open(os.path.join(save_dir, 'architecture.txt'), 'w') as f:
         print(model, file=f)

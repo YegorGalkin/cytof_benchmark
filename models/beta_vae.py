@@ -6,10 +6,14 @@ from torch.nn import functional as F
 from .types_ import *
 
 
-class VanillaVAE(BaseVAE):
+class BetaVAE(BaseVAE):
 
     def __init__(self, config: config_dict.ConfigDict) -> None:
-        super(VanillaVAE, self).__init__()
+        super(BetaVAE, self).__init__()
+
+        if config.loss_type == 'disentangled_beta':
+            self.C_max = torch.Tensor([config.C_max]).to(config.device)
+            self.C_stop_iter = torch.Tensor([config.C_stop_iter]).to(config.device)
 
         modules = []
 
@@ -93,10 +97,12 @@ class VanillaVAE(BaseVAE):
 
     def loss_function(self,
                       *args,
-                      config: config_dict.ConfigDict) -> dict:
+                      config: config_dict.ConfigDict,
+                      epoch: int = 0) -> dict:
         r"""
         Computes the VAE loss function.
         KL(N(\mu, \sigma), N(0, 1)) = \log \frac{1}{\sigma} + \frac{\sigma^2 + \mu^2}{2} - \frac{1}{2}
+        :param epoch: current epoch
         :param config: Config file with weight for KLD
         :param args:
         :return:
@@ -110,7 +116,14 @@ class VanillaVAE(BaseVAE):
 
         kld_loss = torch.mean(-0.5 * torch.sum(1 + log_var - mu ** 2 - log_var.exp(), dim=1), dim=0)
 
-        loss = recons_loss + config.kld_weight * kld_loss
+        if config.loss_type == 'beta':
+            loss = recons_loss + config.kld_weight * kld_loss
+        elif config.loss_type == 'disentangled_beta':
+            C = torch.clamp(self.C_max / self.C_stop_iter * epoch, 0, self.C_max.data[0])
+            loss = recons_loss + config.kld_weight * (kld_loss - C).abs()
+        else:
+            return {}
+
         return {'loss': loss, 'MSE': recons_loss.detach(), 'KLD': -kld_loss.detach()}
 
     def generate(self, x: Tensor, **kwargs) -> Tensor:
