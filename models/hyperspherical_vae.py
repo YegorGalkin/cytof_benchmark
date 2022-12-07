@@ -1,32 +1,26 @@
 import torch
+import torch.utils.data
 from ml_collections import config_dict
 from models import BaseVAE
 from torch import nn
 from torch.nn import functional as F
 from .types_ import *
 
+from models.hyperspherical_vae_extra.distributions import VonMisesFisher
+from models.hyperspherical_vae_extra.distributions import HypersphericalUniform
 
-class BetaVAE(BaseVAE):
+
+class HyperSphericalVAE(BaseVAE):
 
     def __init__(self, config: config_dict.ConfigDict) -> None:
-        super(BetaVAE, self).__init__()
+        super(HyperSphericalVAE, self).__init__()
 
         self.kld_weight = torch.Tensor([config.kld_weight]).to(config.device)
-        self.batch_size = torch.Tensor([config.batch_size]).to(config.device)
-
-        self.loss_type = config.loss_type
-
-        self.aug_p = config.aug_p
-        self.aug_std = config.aug_std
-
-        if self.loss_type == 'disentangled_beta':
-            self.C_max = torch.Tensor([config.C_max]).to(config.device)
-            self.C_stop_iter = torch.Tensor([config.C_stop_iter]).to(config.device)
+        self.z_dim = config.latent_dim
+        self.device = config.device
 
         modules = []
 
-        if self.aug_p > 0:
-            modules.append(nn.Dropout1d(p=self.aug_p))
         # Build Encoder
 
         encoder_dims = [config.in_features] + list(config.hidden_dims)
@@ -41,7 +35,7 @@ class BetaVAE(BaseVAE):
             )
         self.encoder = nn.Sequential(*modules)
         self.fc_mu = nn.Linear(config.hidden_dims[-1], config.latent_dim)
-        self.fc_var = nn.Linear(config.hidden_dims[-1], config.latent_dim)
+        self.fc_var = nn.Linear(config.hidden_dims[-1], 1)
 
         # Build Decoder
         modules = []
@@ -68,12 +62,14 @@ class BetaVAE(BaseVAE):
         result = self.encoder(input)
         result = torch.flatten(result, start_dim=1)
 
-        # Split the result into mu and var components
-        # of the latent Gaussian distribution
-        mu = self.fc_mu(result)
-        log_var = self.fc_var(result)
+        # Split the result into mean and concentration components
+        # of the latent von Mises-Fisher distribution
+        z_mean = self.fc_mu(result)
+        z_mean = z_mean / z_mean.norm(dim=-1, keepdim=True)
 
-        return [mu, log_var]
+        z_var = F.softplus(self.fc_var(result)) + 1
+
+        return [z_mean, z_var]
 
     def decode(self, z: Tensor) -> Tensor:
         """
@@ -88,25 +84,24 @@ class BetaVAE(BaseVAE):
         result = self.final_layer(result)
         return result
 
-    def reparameterize(self, mu: Tensor, logvar: Tensor) -> Tensor:
+    def reparameterize(self, z_mean: Tensor, z_var: Tensor) -> Tensor:
         """
-        Reparameterization trick to sample from N(mu, var) from
-        N(0,1).
-        :param mu: (Tensor) Mean of the latent Gaussian [B x D]
-        :param logvar: (Tensor) Standard deviation of the latent Gaussian [B x D]
+
         :return: (Tensor) [B x D]
         """
-        std = torch.exp(0.5 * logvar)
-        eps = torch.randn_like(std)
-        return eps * std + mu
+        q_z = VonMisesFisher(z_mean, z_var)
+        p_z = HypersphericalUniform(self.z_dim - 1, device=self.device)
 
-    def forward(self, input: Tensor, **kwargs) -> List[Tensor]:
-        if self.aug_std > 0 and self.training:
-            mu, log_var = self.encode(input + torch.randn_like(input)*self.aug_std)
-        else:
-            mu, log_var = self.encode(input)
-        z = self.reparameterize(mu, log_var)
-        return [self.decode(z), input, mu, log_var]
+        return q_z, p_z
+
+    def forward(self, x: Tensor, **kwargs) -> list[tuple[Tensor, Tensor] | Tensor]:
+
+        z_mean, z_var = self.encode(x)
+        q_z, p_z = self.reparameterize(z_mean, z_var)
+        z = q_z.rsample()
+        x_ = self.decode(z)
+
+        return [x_, x, q_z, p_z]
 
     def loss_function(self,
                       *args,
@@ -120,20 +115,14 @@ class BetaVAE(BaseVAE):
         """
         recons = args[0]
         input = args[1]
-        mu = args[2]
-        log_var = args[3]
+        q_z = args[2]
+        p_z = args[3]
 
         recons_loss = F.mse_loss(recons, input)
 
-        kld_loss = torch.mean(-0.5 * torch.sum(1 + log_var - mu ** 2 - log_var.exp(), dim=1), dim=0)
+        kld_loss = torch.distributions.kl.kl_divergence(q_z, p_z).mean()
 
-        if self.loss_type == 'beta':
-            loss = recons_loss + self.kld_weight * kld_loss
-        elif self.loss_type == 'disentangled_beta':
-            C = torch.clamp(self.C_max / self.C_stop_iter * epoch, 0, self.C_max.data[0])
-            loss = recons_loss + self.kld_weight * (kld_loss - C).abs()
-        else:
-            return {}
+        loss = recons_loss + self.kld_weight * kld_loss
 
         return {'loss': loss, 'MSE': recons_loss.detach(), 'KLD': -kld_loss.detach()}
 
@@ -147,4 +136,4 @@ class BetaVAE(BaseVAE):
         return self.forward(x)[0]
 
     def latent(self, x: Tensor, **kwargs) -> Tensor:
-        return self.reparameterize(*self.encode(x))
+        return self.reparameterize(*self.encode(x))[0].rsample()

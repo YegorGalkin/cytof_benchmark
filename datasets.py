@@ -32,8 +32,8 @@ class OrganoidDataset:
         train_n, val_n = int(len(X) * 0.7), int(len(X) * 0.2)
         train_idx, val_idx, test_idx = indices[:train_n], indices[train_n:train_n + val_n], indices[train_n + val_n:]
 
-        self.train = X[train_idx].clone().to(device), y[train_idx].clone().to(device)
-        self.val = X[val_idx].clone().to(device), y[val_idx].clone().to(device)
-        self.test = X[test_idx].clone().to(device), y[test_idx].clone().to(device)
+        self.train = X[train_idx].clone().to(device, non_blocking=True), y[train_idx].clone().to(device, non_blocking=True)
+        self.val = X[val_idx].clone().to(device, non_blocking=True), y[val_idx].clone().to(device, non_blocking=True)
+        self.test = X[test_idx].clone().to(device, non_blocking=True), y[test_idx].clone().to(device, non_blocking=True)
 
         self.variables = data_df.columns

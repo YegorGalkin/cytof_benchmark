@@ -1,4 +1,5 @@
 import datetime
+import math
 import os.path
 from glob import glob
 import torch
@@ -7,7 +8,7 @@ from torch import optim
 from torch.optim import lr_scheduler
 from tqdm import tqdm
 from datasets import OrganoidDataset, CellType
-from models import BetaVAE, WAE_MMD
+from models import BetaVAE, WAE_MMD, HyperSphericalVAE
 import pandas as pd
 import seaborn as sns
 import matplotlib
@@ -37,6 +38,8 @@ def main(_):
         model = BetaVAE(config=config).to(config.device)
     elif config.model == "WAE_MMD":
         model = WAE_MMD(config=config).to(config.device)
+    elif config.model == "HyperSphericalVAE":
+        model = HyperSphericalVAE(config=config).to(config.device)
     else:
         return
 
@@ -44,6 +47,11 @@ def main(_):
     X_val, y_val = data.val
 
     X_train_batches = torch.split(X_train, split_size_or_sections=config.batch_size)
+    if X_train_batches[-1].shape[0] < config.batch_size // 2:
+        print("Last batch of size {} is smaller than half batch size {} and is dropped".
+              format(X_train_batches[-1].shape[0], config.batch_size))
+        X_train_batches = X_train_batches[:-1]
+
     X_val_batches = torch.split(X_val, split_size_or_sections=config.batch_size)
 
     optimizer = optim.Adam(model.parameters(),
@@ -55,23 +63,29 @@ def main(_):
                                         steps_per_epoch=len(X_train_batches),
                                         epochs=config.epochs)
     loss_list = list()
+    torch.cuda.empty_cache()
     start_time = datetime.datetime.now()
     for epoch in tqdm(range(1, config.epochs + 1)):
         for X_batch in X_train_batches:
             optimizer.zero_grad()
+            model.train()
             outputs = model.forward(X_batch)
-            loss = model.loss_function(*outputs, config=config)
+            loss = model.loss_function(*outputs, epoch=epoch)
+
             loss['loss'].backward()
+            if not math.isinf(config.max_grad_norm):
+                torch.nn.utils.clip_grad_norm_(model.parameters(), config.max_grad_norm)
             optimizer.step()
             scheduler.step()
 
         if epoch % config.save_loss_every_n_epochs == 0 or epoch == config.epochs:
             with torch.no_grad():
+                model.eval()
                 train_losses = list()
                 for X_batch in X_train_batches:
                     loss_dict = dict()
                     outputs = model.forward(X_batch)
-                    loss_train = model.loss_function(*outputs, config=config)
+                    loss_train = model.loss_function(*outputs, epoch=epoch)
                     for key in loss_train.keys():
                         loss_dict['train_' + key] = loss_train[key].to('cpu').numpy().item() * X_batch.shape[0]
                     train_losses.append(loss_dict)
@@ -80,7 +94,7 @@ def main(_):
                 for X_batch in X_val_batches:
                     loss_dict = dict()
                     outputs = model.forward(X_batch)
-                    loss_val = model.loss_function(*outputs, config=config)
+                    loss_val = model.loss_function(*outputs, epoch=epoch)
                     for key in loss_val.keys():
                         loss_dict['val_' + key] = loss_val[key].to('cpu').numpy().item() * X_batch.shape[0]
                     val_losses.append(loss_dict)
@@ -92,6 +106,7 @@ def main(_):
     print(f'Memory allocated:{torch.cuda.memory_allocated()}')
     print(f'Max memory allocated:{torch.cuda.max_memory_allocated()}')
     print(f'Finished Training in {(datetime.datetime.now()-start_time)}')
+    torch.cuda.empty_cache()
 
     run_dirs = glob(os.path.join(config.output_dir, 'run_*'))
     max_run = max([int(os.path.basename(run_dir).split('_')[1]) for run_dir in run_dirs]) if run_dirs else 0
@@ -114,8 +129,14 @@ def main(_):
     with open(os.path.join(save_dir, 'config.txt'), 'w') as f:
         print(config, file=f)
 
+    latent_vals = []
     with torch.no_grad():
-        latent_val = model.latent(X_val).to('cpu')
+        for X_batch in X_val_batches:
+            latent_val_batch = model.latent(X_batch).to('cpu')
+            latent_vals.append(latent_val_batch)
+
+    latent_val = torch.cat(latent_vals)
+    torch.cuda.empty_cache()
 
     latent_df = pd.DataFrame(latent_val.numpy(), columns=["VAE{}".format(i) for i in range(1, latent_val.shape[1] + 1)])
     latent_df.to_csv(os.path.join(save_dir, 'latent.csv.gz'), index=None)
