@@ -25,4 +25,6 @@ def get_config():
     config.save_loss_every_n_epochs = 25
     config.device = 'cuda'
     config.C_stop_iter = config.epochs // 5
+    config.activation = 'LeakyReLU'
+    config.max_grad_norm = float("inf")
     return config

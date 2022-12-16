@@ -12,12 +12,10 @@ class BetaVAE(BaseVAE):
         super(BetaVAE, self).__init__()
 
         self.kld_weight = torch.Tensor([config.kld_weight]).to(config.device)
-        self.batch_size = torch.Tensor([config.batch_size]).to(config.device)
 
         self.loss_type = config.loss_type
 
-        self.aug_p = config.aug_p
-        self.aug_std = config.aug_std
+        self.act_class = getattr(nn, config.activation)
 
         if self.loss_type == 'disentangled_beta':
             self.C_max = torch.Tensor([config.C_max]).to(config.device)
@@ -25,8 +23,6 @@ class BetaVAE(BaseVAE):
 
         modules = []
 
-        if self.aug_p > 0:
-            modules.append(nn.Dropout1d(p=self.aug_p))
         # Build Encoder
 
         encoder_dims = [config.in_features] + list(config.hidden_dims)
@@ -36,7 +32,7 @@ class BetaVAE(BaseVAE):
                 nn.Sequential(
                     nn.Linear(in_features=encoder_dims[i], out_features=encoder_dims[i + 1]),
                     nn.BatchNorm1d(encoder_dims[i + 1]),
-                    nn.LeakyReLU(),
+                    self.act_class(),
                 )
             )
         self.encoder = nn.Sequential(*modules)
@@ -52,7 +48,8 @@ class BetaVAE(BaseVAE):
                 nn.Sequential(
                     nn.Linear(decoder_dims[i], decoder_dims[i + 1]),
                     nn.BatchNorm1d(decoder_dims[i + 1]),
-                    nn.LeakyReLU())
+                    self.act_class()
+                )
             )
 
         self.decoder = nn.Sequential(*modules)
@@ -101,10 +98,7 @@ class BetaVAE(BaseVAE):
         return eps * std + mu
 
     def forward(self, input: Tensor, **kwargs) -> List[Tensor]:
-        if self.aug_std > 0 and self.training:
-            mu, log_var = self.encode(input + torch.randn_like(input)*self.aug_std)
-        else:
-            mu, log_var = self.encode(input)
+        mu, log_var = self.encode(input)
         z = self.reparameterize(mu, log_var)
         return [self.decode(z), input, mu, log_var]
 

@@ -18,6 +18,7 @@ class HyperSphericalVAE(BaseVAE):
         self.kld_weight = torch.Tensor([config.kld_weight]).to(config.device)
         self.z_dim = config.latent_dim
         self.device = config.device
+        self.act_class = getattr(nn, config.activation)
 
         modules = []
 
@@ -30,7 +31,7 @@ class HyperSphericalVAE(BaseVAE):
                 nn.Sequential(
                     nn.Linear(in_features=encoder_dims[i], out_features=encoder_dims[i + 1]),
                     nn.BatchNorm1d(encoder_dims[i + 1]),
-                    nn.LeakyReLU(),
+                    self.act_class(),
                 )
             )
         self.encoder = nn.Sequential(*modules)
@@ -46,7 +47,7 @@ class HyperSphericalVAE(BaseVAE):
                 nn.Sequential(
                     nn.Linear(decoder_dims[i], decoder_dims[i + 1]),
                     nn.BatchNorm1d(decoder_dims[i + 1]),
-                    nn.LeakyReLU())
+                    self.act_class())
             )
 
         self.decoder = nn.Sequential(*modules)

@@ -11,6 +11,11 @@ class WAE_MMD(BaseVAE):
     def __init__(self, config: config_dict.ConfigDict) -> None:
         super(WAE_MMD, self).__init__()
 
+        self.kernel_type = config.kernel_type
+        self.reg_weight = config.reg_weight
+        self.latent_var = config.latent_var
+        self.act_class = getattr(nn, config.activation)
+
         # Build Encoder
         modules = []
         encoder_dims = [config.in_features] + list(config.hidden_dims)
@@ -20,7 +25,7 @@ class WAE_MMD(BaseVAE):
                 nn.Sequential(
                     nn.Linear(in_features=encoder_dims[i], out_features=encoder_dims[i + 1]),
                     nn.BatchNorm1d(encoder_dims[i + 1]),
-                    nn.LeakyReLU(),
+                    self.act_class(),
                 )
             )
         self.encoder = nn.Sequential(*modules)
@@ -35,7 +40,7 @@ class WAE_MMD(BaseVAE):
                 nn.Sequential(
                     nn.Linear(decoder_dims[i], decoder_dims[i + 1]),
                     nn.BatchNorm1d(decoder_dims[i + 1]),
-                    nn.LeakyReLU())
+                    self.act_class())
             )
 
         self.decoder = nn.Sequential(*modules)
@@ -74,19 +79,19 @@ class WAE_MMD(BaseVAE):
 
     def loss_function(self,
                       *args,
-                      config: config_dict.ConfigDict) -> dict:
+                      epoch: int = 0) -> dict:
         recons = args[0]
         input = args[1]
         z = args[2]
 
         recons_loss = F.mse_loss(recons, input)
 
-        mmd_loss = self.compute_mmd(z, config)
+        mmd_loss = self.compute_mmd(z)
 
         loss = recons_loss + mmd_loss
         return {'loss': loss, 'MSE': recons_loss, 'MMD': mmd_loss}
 
-    def compute_mmd(self, z: Tensor, config: config_dict.ConfigDict) -> Tensor:
+    def compute_mmd(self, z: Tensor) -> Tensor:
 
         prior_z = torch.randn_like(z)
 
@@ -97,16 +102,16 @@ class WAE_MMD(BaseVAE):
 
         B = z.size(0)
         z_dim = z.size(1)
-        if config.kernel_type == 'rbf':
-            sigma = 1. / (2. * z_dim * config.latent_var)
+        if self.kernel_type == 'rbf':
+            sigma = 1. / (2. * z_dim * self.latent_var)
 
             K = torch.exp(- sigma * (rzz.t() + rzz - 2 * zz))
             L = torch.exp(- sigma * (rpp.t() + rpp - 2 * pp))
             P = torch.exp(- sigma * (rzz.t() + rpp - 2 * zp))
-        elif config.kernel_type == 'imq':
+        elif self.kernel_type == 'imq':
             # C value from WAE paper https://arxiv.org/pdf/1711.01558v1.pdf
             # expected squared distance between two multivariate Gaussian vectors drawn from prior_z
-            C = 2. * z_dim * config.latent_var
+            C = 2. * z_dim * self.latent_var
 
             K = C / (1e-7 + C + rzz.t() + rzz - 2 * zz)
             L = C / (1e-7 + C + rpp.t() + rpp - 2 * pp)
@@ -116,7 +121,7 @@ class WAE_MMD(BaseVAE):
         gamma = (2. / (B * B))
         mmd = beta * (torch.sum(K) + torch.sum(L)) - gamma * torch.sum(P)
 
-        return config.reg_weight * mmd
+        return self.reg_weight * mmd
         # Sample from prior (Gaussian) distribution
 
     def generate(self, x: Tensor, **kwargs) -> Tensor:

@@ -15,6 +15,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 from absl import app
 from ml_collections.config_flags import config_flags
+import pickle
 
 matplotlib.use('Agg')
 matplotlib.style.use('ggplot')
@@ -99,13 +100,15 @@ def main(_):
                         loss_dict['val_' + key] = loss_val[key].to('cpu').numpy().item() * X_batch.shape[0]
                     val_losses.append(loss_dict)
 
-                mean_train_loss = {'train_' + key: sum(d['train_' + key] for d in train_losses) / X_train.shape[0] for key in loss_val.keys()}
-                mean_val_loss = {'val_' + key: sum(d['val_' + key] for d in val_losses) / X_val.shape[0] for key in loss_val.keys()}
+                mean_train_loss = {'train_' + key: sum(d['train_' + key] for d in train_losses) / X_train.shape[0] for
+                                   key in loss_val.keys()}
+                mean_val_loss = {'val_' + key: sum(d['val_' + key] for d in val_losses) / X_val.shape[0] for key in
+                                 loss_val.keys()}
                 loss_list.append({'epoch': epoch} | mean_train_loss | mean_val_loss)
 
     print(f'Memory allocated:{torch.cuda.memory_allocated()}')
     print(f'Max memory allocated:{torch.cuda.max_memory_allocated()}')
-    print(f'Finished Training in {(datetime.datetime.now()-start_time)}')
+    print(f'Finished Training in {(datetime.datetime.now() - start_time)}')
     torch.cuda.empty_cache()
 
     run_dirs = glob(os.path.join(config.output_dir, 'run_*'))
@@ -119,7 +122,7 @@ def main(_):
     with open(os.path.join(save_dir, 'summary.txt'), 'w') as f:
         print(f'memory,{torch.cuda.memory_allocated()}', file=f)
         print(f'max_memory,{torch.cuda.max_memory_allocated()}', file=f)
-        print(f'time,{(datetime.datetime.now()-start_time).seconds}', file=f)
+        print(f'time,{(datetime.datetime.now() - start_time).seconds}', file=f)
         print(f'time_str,{(datetime.datetime.now() - start_time)}', file=f)
         print('val_mse,{}'.format(pd.DataFrame(loss_list)['val_MSE'].iat[-1]), file=f)
 
@@ -128,6 +131,9 @@ def main(_):
 
     with open(os.path.join(save_dir, 'config.txt'), 'w') as f:
         print(config, file=f)
+
+    with open(os.path.join(save_dir, 'config.pkl'), 'wb') as f:
+        pickle.dump(config, file=f)
 
     latent_vals = []
     with torch.no_grad():
@@ -147,7 +153,7 @@ def main(_):
     dot_plot = sns.lmplot(x="VAE1", y="VAE2",
                           data=pd.concat([latent_df, metadata], axis=1).head(10000),
                           fit_reg=False,
-                          hue='Cell type',  # color by cluster
+                          hue='Cell type',
                           legend=True,
                           scatter_kws={"s": 5})
     plt.savefig(os.path.join(save_dir, 'latent.png'))
@@ -168,6 +174,53 @@ def main(_):
                              legend=True)
 
     plt.savefig(os.path.join(save_dir, 'loss.png'))
+
+    # UMAP plot
+    if config.latent_dim > 2:
+        import umap
+        import umap.plot
+        from bokeh.io import save
+
+        mapper = umap.UMAP().fit(latent_df)
+        umap_points = 50000
+        mapper.embedding_ = mapper.embedding_[:umap_points]
+
+        p = umap.plot.interactive(mapper,
+                                  labels=metadata['Cell type'].head(umap_points),
+                                  hover_data=metadata.head(umap_points),
+                                  point_size=2,
+                                  interactive_text_search=True,
+                                  interactive_text_search_columns=['Cell type', "Day"])
+        save(p, filename=os.path.join(save_dir, 'umap_2d.html'))
+
+    # Spherical plots
+    if config.model == 'HyperSphericalVAE' and config.latent_dim == 3:
+        import cartopy
+        import geopandas
+        from shapely.geometry import Point
+        import plotly.express as px
+
+        sphere = geopandas.GeoSeries(latent_df.apply(Point, axis=1), crs=cartopy.crs.Geocentric())
+        projected = sphere.to_crs(cartopy.crs.Mollweide())
+        data = pd.DataFrame({'x': projected.x,
+                             'y': projected.y,
+                             'Cell type': metadata['Cell type'],
+                             'Day': metadata['Day']})
+        # 2d projection plot
+        sns.lmplot(x="x", y="y",
+                   data=data.head(10000),
+                   fit_reg=False,
+                   hue='Cell type',  # color by cluster
+                   legend=True,
+                   scatter_kws={"s": 5})
+        plt.axis('equal')
+        plt.savefig(os.path.join(save_dir, '2d_projection.png'))
+
+        # 3d point cloud plot
+        plot_data = pd.concat([latent_df, metadata], axis=1).head(5000)
+        fig = px.scatter_3d(plot_data, x='VAE1', y='VAE2', z='VAE3', color='Cell type')
+        fig.update_traces(marker_size=3)
+        fig.write_html(os.path.join(save_dir, '3d_plot.html'))
 
 
 if __name__ == '__main__':
