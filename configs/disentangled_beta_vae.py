@@ -7,7 +7,7 @@ def get_config():
     config.dataset = 'Organoid'
     config.model = 'VAE'
     config.seed = 12345
-    config.batch_size = 10**6
+    config.batch_size = 4096
     config.output_dir = './logs/VanillaVAE/'
     # VAE parameters
     config.in_features = 41
@@ -19,10 +19,10 @@ def get_config():
     config.loss_type = 'disentangled_beta'
 
     # Optimizer and runner parameters
-    config.learning_rate = 0.07
+    config.learning_rate = 0.05
     config.weight_decay = 0.0
     config.epochs = 10000
-    config.save_loss_every_n_epochs = 25
+    config.save_loss_every_n_epochs = 10
     config.device = 'cuda'
     config.C_stop_iter = config.epochs // 5
     config.activation = 'LeakyReLU'

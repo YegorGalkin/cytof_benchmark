@@ -7,7 +7,7 @@ def get_config():
     config.dataset = 'Organoid'
     config.model = 'HyperSphericalVAE'
     config.seed = 12345
-    config.batch_size = 2**10
+    config.batch_size = 4096
     config.output_dir = './logs/HyperSphericalVAE/'
     # VAE parameters
     config.in_features = 41
