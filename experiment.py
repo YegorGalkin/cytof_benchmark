@@ -29,7 +29,7 @@ def main(_):
     print(f"CUDA available:{torch.cuda.is_available()}")
 
     if config.dataset == 'Organoid':
-        data = OrganoidDataset()
+        data = OrganoidDataset(device=config.device)
     else:
         return
 

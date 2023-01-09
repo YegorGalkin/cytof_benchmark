@@ -9,7 +9,7 @@ def get_config():
     config.seed = 12345
     config.batch_size = 4096
     config.output_dir = './logs/VanillaVAE/'
-    # VAE parameters
+    # VAE architecture parameters
     config.in_features = 41
     config.latent_dim = 2
     config.hidden_dims = (32, 32, 32)
