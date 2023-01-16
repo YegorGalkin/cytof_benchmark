@@ -1,6 +1,3 @@
-from datetime import time
-from typing import List
-
 import numpy as np
 import ray
 import torch
@@ -11,8 +8,8 @@ from ray.tune.schedulers import PopulationBasedTraining
 import time
 
 from datasets import OrganoidDataset
-from configs.pbt.beta_vae_pbt import get_config
-from models import BetaVAE
+from configs.pbt.hs_vae_pbt import get_config
+from models import HyperSphericalVAE
 
 
 def train(model, optimizer, train_dataloader):
@@ -49,7 +46,7 @@ def test(model, val_dataloader):
 
 def vae_train(cfg):
     config = get_config()
-    model = BetaVAE(config).to(config.device)
+    model = HyperSphericalVAE(config).to(config.device)
 
     optimizer = optim.Adam(model.parameters(),
                            lr=cfg.get("learning_rate"),
@@ -120,15 +117,15 @@ if __name__ == '__main__':
         config["batch_size"] = min(config["batch_size"], 32*1024)
         return config
 
-    perturbation_interval = 50
+    perturbation_interval = 25
     scheduler = PopulationBasedTraining(
         time_attr="training_iteration",
-        perturbation_interval=perturbation_interval,
         perturbation_factors=(1.5, 0.6),
+        perturbation_interval=perturbation_interval,
         hyperparam_mutations={
             # Distribution for resampling
             "learning_rate": tune.loguniform(1e-9, 1e-1),
-            "batch_size": tune.randint(1024, 32 * 1024)
+            "batch_size": tune.qlograndint(256, 32 * 1024, 32, base=2),
         },
         custom_explore_fn=explore,
     )
@@ -136,9 +133,9 @@ if __name__ == '__main__':
     tuner = tune.Tuner(
         tune.with_resources(vae_train, {"cpu": 4, "gpu": 1.0/16}),
         run_config=air.RunConfig(
-            local_dir='/data/PycharmProjects/cytof_benchmark/logs/ray_tune/Beta_VAE/test',
-            name="vae_training",
-            stop={"checkpoint_time": 60*10},
+            local_dir='/data/PycharmProjects/cytof_benchmark/logs/ray_tune/HS_VAE',
+            name="hs_vae_training",
+            stop={"checkpoint_time": 60*60*8},
             verbose=2,
         ),
         tune_config=tune.TuneConfig(
@@ -150,18 +147,17 @@ if __name__ == '__main__':
         param_space={
             # Define how initial values of the learning rates should be chosen.
             "learning_rate": tune.loguniform(1e-9, 1e-1),
-            "batch_size": tune.randint(1024, 32 * 1024),
+            "batch_size": tune.qlograndint(1024, 32 * 1024, 32, base=2),
             "checkpoint_interval": perturbation_interval,
             "time_start": time.time(),
         },
     )
     results_grid = tuner.fit()
 
-    result_dfs = [result.metrics_dataframe for result in results_grid]
-    best_result = results_grid.get_best_result(metric="MSE", mode="min")
+    best_result = results_grid.get_best_result(metric="loss", mode="min")
 
-    torch.save(best_result.checkpoint.to_dict(), '/data/PycharmProjects/cytof_benchmark/logs/ray_tune/Beta_VAE_big.pth')
-    with open('/data/PycharmProjects/cytof_benchmark/logs/ray_tune/Beta_VAE_big_summary.txt', 'w') as f:
+    torch.save(best_result.checkpoint.to_dict(), '/data/PycharmProjects/cytof_benchmark/logs/ray_tune/HS_VAE/HS_VAE.pth')
+    with open('/data/PycharmProjects/cytof_benchmark/logs/ray_tune/HS_VAE/HS_VAE_summary.txt', 'w') as f:
         print('val_mse,{}'.format(best_result.metrics['MSE']), file=f)
         print('val_kld,{}'.format(best_result.metrics['KLD']), file=f)
         print('val_loss,{}'.format(best_result.metrics['loss']), file=f)

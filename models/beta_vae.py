@@ -18,8 +18,7 @@ class BetaVAE(BaseVAE):
         self.act_class = getattr(nn, config.activation)
 
         if self.loss_type == 'disentangled_beta':
-            self.C_max = torch.Tensor([config.C_max]).to(config.device)
-            self.C_stop_iter = torch.Tensor([config.C_stop_iter]).to(config.device)
+            self.C = torch.Tensor([config.C]).to(config.device)
 
         modules = []
 
@@ -124,10 +123,9 @@ class BetaVAE(BaseVAE):
         if self.loss_type == 'beta':
             loss = recons_loss + self.kld_weight * kld_loss
         elif self.loss_type == 'disentangled_beta':
-            C = torch.clamp(self.C_max / self.C_stop_iter * epoch, 0, self.C_max.data[0])
-            loss = recons_loss + self.kld_weight * (kld_loss - C).abs()
+            loss = recons_loss + self.kld_weight * (kld_loss - self.C).abs()
         else:
-            return {}
+            raise NotImplementedError()
 
         return {'loss': loss, 'MSE': recons_loss.detach(), 'KLD': -kld_loss.detach()}
 
