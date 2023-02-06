@@ -10,5 +10,5 @@ GaussianVAE = BetaVAE
 vae_models = {
     'VanillaVAE': BetaVAE,
     'WAE_MMD': WAE_MMD,
-    'HyperSphericalVAE' : HyperSphericalVAE,
+    'HyperSphericalVAE': HyperSphericalVAE,
 }

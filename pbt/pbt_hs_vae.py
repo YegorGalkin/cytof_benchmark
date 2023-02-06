@@ -7,7 +7,7 @@ from ray.air import session, Checkpoint
 from ray.tune.schedulers import PopulationBasedTraining
 import time
 
-from datasets import OrganoidDataset
+from datasets import OrganoidDatasetDeprecated
 from configs.pbt.hs_vae_pbt import get_config
 from models import HyperSphericalVAE
 
@@ -52,7 +52,7 @@ def vae_train(cfg):
                            lr=cfg.get("learning_rate"),
                            )
 
-    dataset = OrganoidDataset(data_dir='/data/PycharmProjects/cytof_benchmark/data/organoids', device=config.device)
+    dataset = OrganoidDatasetDeprecated(data_dir='/data/PycharmProjects/cytof_benchmark/data/organoids', device=config.device)
     X_train, y_train = dataset.train
     X_val, y_val = dataset.val
     X_train_batches = torch.split(X_train, split_size_or_sections=cfg.get("batch_size"))

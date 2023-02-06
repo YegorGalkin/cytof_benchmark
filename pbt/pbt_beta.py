@@ -7,10 +7,9 @@ from ray.air import session, Checkpoint
 from ray.tune.schedulers import PopulationBasedTraining
 import time
 
-from datasets import OrganoidDataset
+from datasets import OrganoidDatasetDeprecated
 from configs.pbt.beta_vae_pbt import get_config
 from models import BetaVAE
-
 
 def train(model, optimizer, train_dataloader):
     for X_batch in train_dataloader:
@@ -52,7 +51,7 @@ def vae_train(cfg):
                            lr=cfg.get("learning_rate"),
                            )
 
-    dataset = OrganoidDataset(data_dir='/data/PycharmProjects/cytof_benchmark/data/organoids', device=config.device)
+    dataset = OrganoidDatasetDeprecated(data_dir='/data/PycharmProjects/cytof_benchmark/data/organoids', device=config.device)
     X_train, y_train = dataset.train
     X_val, y_val = dataset.val
     X_train_batches = torch.split(X_train, split_size_or_sections=cfg.get("batch_size"))
@@ -63,7 +62,6 @@ def vae_train(cfg):
         X_train_batches = X_train_batches[:-1]
 
     # Initialize step count and checkpoint timer
-    checkpoint_time = 0.0
     step = 1
     if session.get_checkpoint():
         checkpoint_dict = session.get_checkpoint().to_dict()
@@ -84,10 +82,9 @@ def vae_train(cfg):
                 param_group["lr"] = cfg["learning_rate"]
     while True:
         train(model, optimizer, X_train_batches)
-        MSE, KLD, loss = test(model, X_val_batches)
 
-        checkpoint = None
         if step % cfg["checkpoint_interval"] == 0:
+            MSE, KLD, loss = test(model, X_val_batches)
             checkpoint = Checkpoint.from_dict(
                 {
                     "model": model.state_dict(),
@@ -96,7 +93,7 @@ def vae_train(cfg):
                 }
             )
             checkpoint_time = time.time()-cfg.get("time_start")
-        session.report(
+            session.report(
             {
                 "MSE": MSE,
                 "KLD": KLD,
@@ -117,9 +114,9 @@ if __name__ == '__main__':
         config["batch_size"] = min(config["batch_size"], 32*1024)
         return config
 
-    perturbation_interval = 50
+    perturbation_interval = 10
     scheduler = PopulationBasedTraining(
-        time_attr="training_iteration",
+        time_attr="step",
         perturbation_interval=perturbation_interval,
         perturbation_factors=(1.5, 0.6),
         hyperparam_mutations={
@@ -134,7 +131,7 @@ if __name__ == '__main__':
         tune.with_resources(vae_train, {"cpu": 4, "gpu": 1.0/16}),
         run_config=air.RunConfig(
             failure_config=ray.air.config.FailureConfig(max_failures=5),
-            local_dir='/data/PycharmProjects/cytof_benchmark/logs/ray_tune/Beta_VAE',
+            local_dir='/data/PycharmProjects/cytof_benchmark/logs/ray_tune/test3',
             name="vae_training",
             stop={"checkpoint_time": 60*60*8},
             verbose=2,
@@ -157,8 +154,8 @@ if __name__ == '__main__':
 
     best_result = results_grid.get_best_result(metric="loss", mode="min")
 
-    torch.save(best_result.checkpoint.to_dict(), '/data/PycharmProjects/cytof_benchmark/logs/ray_tune/Beta_VAE/Beta_VAE_big.pth')
-    with open('/data/PycharmProjects/cytof_benchmark/logs/ray_tune/Beta_VAE/Beta_VAE_summary.txt', 'w') as f:
+    torch.save(best_result.checkpoint.to_dict(), '/data/PycharmProjects/cytof_benchmark/logs/ray_tune/test3/Beta_VAE_big.pth')
+    with open('/data/PycharmProjects/cytof_benchmark/logs/ray_tune/test3/Beta_VAE_summary.txt', 'w') as f:
         print('val_mse,{}'.format(best_result.metrics['MSE']), file=f)
         print('val_kld,{}'.format(best_result.metrics['KLD']), file=f)
         print('val_loss,{}'.format(best_result.metrics['loss']), file=f)

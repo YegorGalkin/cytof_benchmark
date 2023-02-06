@@ -11,7 +11,7 @@ from ray.tune.schedulers.pb2 import PB2
 from torch import nn
 from torch.nn import functional as F
 
-from datasets import OrganoidDataset
+from datasets import OrganoidDatasetDeprecated
 
 
 def get_config():
@@ -210,7 +210,7 @@ def vae_train(cfg):
                            lr=10**cfg.get("log10_lr"),
                            )
 
-    dataset = OrganoidDataset(data_dir='/data/organoids')
+    dataset = OrganoidDatasetDeprecated(data_dir='/data/organoids')
     X_train, y_train = dataset.train
     X_val, y_val = dataset.val
     X_train_batches = torch.split(X_train, split_size_or_sections=int(2**cfg.get("log2_batch")))

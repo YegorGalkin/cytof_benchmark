@@ -7,7 +7,7 @@ from pytorch_lightning import seed_everything
 from torch import optim
 from torch.optim import lr_scheduler
 from tqdm import tqdm
-from datasets import OrganoidDataset, CellType
+from datasets import OrganoidDatasetDeprecated, CellType
 from models import BetaVAE, WAE_MMD, HyperSphericalVAE
 import pandas as pd
 import seaborn as sns
@@ -29,7 +29,7 @@ def main(_):
     print(f"CUDA available:{torch.cuda.is_available()}")
 
     if config.dataset == 'Organoid':
-        data = OrganoidDataset(device=config.device)
+        data = OrganoidDatasetDeprecated(device=config.device)
     else:
         return
 
