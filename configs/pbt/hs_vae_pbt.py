@@ -1,16 +1,14 @@
-from ml_collections import config_dict
+from configs.pbt import base_pbt
 
 
 def get_config():
-    config = config_dict.ConfigDict()
+    config = base_pbt.get_config()
 
-    # VAE architecture parameters
-    config.in_features = 41
+    config.model = "HyperSphericalVAE"
     config.latent_dim = 3
-    config.hidden_dims = [256, 256, 256, 256, 256]
     config.kld_weight = 0.0025
-    config.loss_type = 'beta'
-    config.activation = 'LeakyReLU'
-    config.device = 'cuda'
+
+    config.local_dir = 'logs/ray_tune/test_all/hs_vae'
+    config.run_name = 'hs_vae_training'
 
     return config
