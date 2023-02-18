@@ -10,7 +10,7 @@ if __name__ == '__main__':
     datasets = ['OrganoidDataset', 'CafDataset', 'ChallengeDataset']
     data_dirs = ['data/organoids', 'data/caf', 'data/breast_cancer_challenge']
     features = [41, 44, 37]
-    intervals = [100, 2, 5]
+    intervals = [100, 5, 15]
 
     for model, config in zip(models, configs):
         for dataset, data_dir, in_features, interval in zip(datasets, data_dirs, features, intervals):
