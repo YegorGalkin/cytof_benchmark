@@ -6,6 +6,7 @@ from .hyperspherical_vae import *
 # Aliases
 VAE = BetaVAE
 GaussianVAE = BetaVAE
+DBetaVAE = BetaVAE
 
 vae_models = {
     'VanillaVAE': BetaVAE,
