@@ -63,6 +63,8 @@ def vae_train(ray_cfg, config):
     # Initialize step count
     step = 1
     metrics = None
+    best_model_state_dict = None
+
     if session.get_checkpoint():
         checkpoint_dict = session.get_checkpoint().to_dict()
 
@@ -72,7 +74,6 @@ def vae_train(ray_cfg, config):
         # current step.
         last_step = checkpoint_dict["step"]
         step = last_step + 1
-        metrics = None
         # NOTE: It's important to set the optimizer learning rates
         # again, since we want to explore the parameters passed in by PBT.
         # Without this, we would continue using the exact same
@@ -83,29 +84,35 @@ def vae_train(ray_cfg, config):
 
     while True:
         train(model, config, optimizer, X_train_dl)
-
+        # Current time
+        checkpoint_time = time.time() - ray_cfg["time_start"]
+        # Keep minimum loss metric for the current training run
         if not metrics:
             metrics = test(model, config, X_val_dl)
         else:
-            # EMA validiation loss
             results = test(model, config, X_val_dl)
-            # TODO: just pick the best dictionary based on loss
-            for key in metrics:
-                metrics[key] = min(results[key], metrics[key])
+            if results['loss'] < metrics['loss']:
+                metrics = results
+                # If training run is close to end, save the checkpoint with the best metric on any step
+                if checkpoint_time > 0.95 * config['soft_time_limit']:
+                    best_model_state_dict = model.state_dict()
 
         if step % ray_cfg["checkpoint_interval"] == 0:
+
             checkpoint = Checkpoint.from_dict(
                 {
                     "model": model.state_dict(),
                     "optim": optimizer.state_dict(),
                     "step": step,
+                    "best_model": best_model_state_dict,
                 }
             )
-            checkpoint_time = time.time() - ray_cfg["time_start"]
+
             session.report(
                 metrics |
                 {
                     'lr': ray_cfg["learning_rate"],
+                    'batch_size': ray_cfg["batch_size"],
                     "step": step,
                     "checkpoint_time": checkpoint_time,
                 },
