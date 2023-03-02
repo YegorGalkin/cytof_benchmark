@@ -70,56 +70,35 @@ class CodeLayer(torch.nn.Module):
     def __init__(self, config: config_dict.ConfigDict) -> None:
         super(CodeLayer, self).__init__()
         if config.hidden_features != config.embed_dim:
-            self.linear_in = nn.Linear(config.hidden_features, config.embed_dim)
+            self.linear_in = nn.Linear(config.hidden_features, config.nb_entries)
         else:
             self.linear_in = nn.Identity()
 
-        self.dim = config.embed_dim
-        self.n_embed = config.nb_entries
-        self.decay = config.decay
-        self.eps = config.eps
+        self.embed_dim = config.embed_dim
+        self.nb_entries = config.nb_entries
+        self.straight_through = config.straight_through
+        self.temperature = config.temperature
+        self.kld_scale = config.kld_scale
 
-        embed = torch.randn(self.dim, self.n_embed, dtype=torch.float32)
+        embed = torch.randn(self.nb_entries, self.embed_dim, dtype=torch.float32)
         self.register_buffer("embed", embed)
-        self.register_buffer("cluster_size", torch.zeros(self.n_embed, dtype=torch.float32))
-        self.register_buffer("embed_avg", embed.clone())
 
     @torch.cuda.amp.autocast(enabled=False)
     def forward(self, x: torch.FloatTensor) -> Tuple[torch.FloatTensor, float, torch.LongTensor]:
         x = self.linear_in(x.float())
 
-        dist = (
-                x.pow(2).sum(1, keepdim=True)
-                - 2 * x @ self.embed
-                + self.embed.pow(2).sum(0, keepdim=True)
-        )
-        _, embed_ind = (-dist).max(1)
-        embed_onehot = F.one_hot(embed_ind, self.n_embed).type(x.dtype)
+        hard = self.straight_through if self.training else True
 
-        quantize = self.embed_code(embed_ind)
+        soft_one_hot = F.gumbel_softmax(x, tau=self.temperature, dim=1, hard=hard)
+        quantize = soft_one_hot @ self.embed
 
-        if self.training:
-            embed_onehot_sum = embed_onehot.sum(0)
-            embed_sum = x.transpose(0, 1) @ embed_onehot
+        # + kl divergence to the prior loss
+        qy = F.softmax(x, dim=1)
+        diff = torch.sum(qy * torch.log(qy * self.nb_entries + 1e-10), dim=1).mean()
 
-            self.cluster_size.data.mul_(self.decay).add_(
-                embed_onehot_sum, alpha=1 - self.decay
-            )
-            self.embed_avg.data.mul_(self.decay).add_(embed_sum, alpha=1 - self.decay)
-            n = self.cluster_size.sum()
-            cluster_size = (
-                    (self.cluster_size + self.eps) / (n + self.n_embed * self.eps) * n
-            )
-            embed_normalized = self.embed_avg / cluster_size.unsqueeze(0)
-            self.embed.data.copy_(embed_normalized)
-
-        diff = (quantize.detach() - x).pow(2).mean()
-        quantize = x + (quantize - x).detach()
+        embed_ind = soft_one_hot.argmax(dim=1)
 
         return quantize, diff, embed_ind
-
-    def embed_code(self, embed_id: torch.LongTensor) -> torch.FloatTensor:
-        return F.embedding(embed_id, self.embed.transpose(0, 1))
 
 
 class VQVAE(BaseVAE):
@@ -128,8 +107,10 @@ class VQVAE(BaseVAE):
         super(VQVAE, self).__init__()
 
         self.encoder = Encoder(config)
-        self.codebook = Decoder(config)
-        self.decoder = CodeLayer(config)
+        self.codebook = CodeLayer(config)
+        self.decoder = Decoder(config)
+
+        self.kld_scale = config.kld_scale
 
     def forward(self, x):
         encoder_output = self.encoder(x)
@@ -143,8 +124,8 @@ class VQVAE(BaseVAE):
         input = args[1]
         l_loss = args[2]
         r_loss = recons.sub(input).pow(2).mean()
-        loss = r_loss + self.beta * l_loss
-        return {'loss': loss, 'MSE': r_loss.detach(), 'Qloss': l_loss.detach()}
+        loss = r_loss + self.kld_scale * l_loss
+        return {'loss': loss, 'MSE': r_loss.detach(), 'KLD': l_loss.detach()}
 
     def generate(self, x: Tensor, **kwargs) -> Tensor:
         """

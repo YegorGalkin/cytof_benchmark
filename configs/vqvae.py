@@ -14,9 +14,9 @@ def get_config():
     config.hidden_features = 32
     config.embed_dim = 16
     config.n_layers = 3
-    config.beta = 0.25
+    config.kld_scale = 5e-4
     config.nb_entries = 256
-    config.decay = 0.99
-    config.eps = 1e-5
+    config.temperature = 1
+    config.straight_through = False
 
     return config
