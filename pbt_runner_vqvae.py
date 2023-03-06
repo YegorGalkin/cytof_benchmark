@@ -1,3 +1,4 @@
+import copy
 import os.path
 from functools import partial
 
@@ -15,7 +16,7 @@ import time
 from torch.utils.data import TensorDataset, DataLoader
 
 import datasets
-import models
+from models import VQVAE
 
 
 def train(model, config, optimizer, train_dataloader):
@@ -48,17 +49,21 @@ def test(model, config, val_dataloader, na_replace=10):
 
 
 def vae_train(ray_cfg, config):
-    model_class = getattr(models, config.model)
 
-    model = model_class(config).to(config.device)
+    config = copy.deepcopy(config)
+    with config.unlocked():
+        config.kld_scale = ray_cfg["kld_scale"]
+        config.temperature = ray_cfg["temperature"]
 
-    optimizer = optim.Adam(model.parameters(), lr=ray_cfg["learning_rate"])
+    model = VQVAE(config).to(config.device)
+
+    optimizer = optim.AdamW(model.parameters(), lr=ray_cfg["learning_rate"])
 
     X_train = ray.get(ray_cfg["train_dataset"])
     X_val = ray.get(ray_cfg["val_dataset"])
 
     X_train_dl = DataLoader(X_train, batch_size=ray_cfg["batch_size"], drop_last=config.drop_last, pin_memory=True)
-    X_val_dl = DataLoader(X_val, batch_size=config.bs_upper, drop_last=False, pin_memory=True)
+    X_val_dl = DataLoader(X_val, batch_size=max(config.bss), drop_last=False, pin_memory=True)
 
     # Initialize step count
     step = 1
@@ -91,7 +96,7 @@ def vae_train(ray_cfg, config):
             metrics = test(model, config, X_val_dl)
         else:
             results = test(model, config, X_val_dl)
-            if results['loss'] < metrics['loss']:
+            if results['MSE'] < metrics['MSE']:
                 metrics = results
                 # If training run is close to end, save the checkpoint with the best metric on any step
                 if checkpoint_time > 0.95 * config['soft_time_limit']:
@@ -142,21 +147,17 @@ def main(_):
     X_train_ds = TensorDataset(torch.Tensor(X_train))
     X_val_ds = TensorDataset(torch.Tensor(X_val))
 
-    def explore(cfg):
-        cfg["batch_size"] = int(np.clip(cfg["batch_size"], a_min=config.bs_lower, a_max=config.bs_upper))
-        return cfg
-
     scheduler = PopulationBasedTraining(
         time_attr="step",
         perturbation_interval=config.perturbation_interval,
-        perturbation_factors=config.perturbation_factors,
         hyperparam_mutations={
             # Distribution for resampling
-            "learning_rate": tune.loguniform(config.lr_lower, config.lr_upper),
-            "batch_size": tune.lograndint(config.bs_lower, config.bs_upper, base=2)
+            "learning_rate": tune.loguniform(min(config.lrs), max(config.lrs)),
+            "batch_size": list(config.bss),
+            "kld_scale": tune.loguniform(min(config.kld_scales), max(config.kld_scales)),
+            "temperature": tune.loguniform(min(config.temperatures), max(config.temperatures)),
         },
         synch=config.synch,
-        custom_explore_fn=explore,
     )
 
     tuner = tune.Tuner(
@@ -171,15 +172,17 @@ def main(_):
             verbose=2,
         ),
         tune_config=tune.TuneConfig(
-            metric="loss",
+            metric="MSE",
             mode="min",
             num_samples=config.population,
             scheduler=scheduler,
         ),
         param_space={
             # Define how initial values of the learning rates should be chosen.
-            "learning_rate": tune.loguniform(config.lr_lower, config.lr_upper),
-            "batch_size": tune.lograndint(config.bs_lower, config.bs_upper, base=2),
+            "learning_rate": 0.005,
+            "batch_size": tune.choice(list(config.bss)),
+            "kld_scale": tune.choice(list(config.kld_scales)),
+            "temperature": tune.choice(list(config.temperatures)),
             "checkpoint_interval": config.perturbation_interval,
             "time_start": time.time(),
             "train_dataset": ray.put(X_train_ds),

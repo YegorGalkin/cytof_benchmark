@@ -3,143 +3,61 @@ library(ggpubr)
 library(viridis)
 
 data_dir = '/data/PycharmProjects/cytof_benchmark/results/mse_data'
+pca_data_dir = '/data/PycharmProjects/cytof_benchmark/results/pca_data/biomarker_mse.csv'
 mse_files = list.files(data_dir,pattern = "*mse.csv",full.names = TRUE)
 
+output_dir = '/data/PycharmProjects/cytof_benchmark/results/mse'
 
-organoid_files = mse_files[str_detect(mse_files,'OrganoidDataset')]
-models = str_split(organoid_files,'/')%>%
+models <- str_split(mse_files,'/')%>%
   map_chr(~tail(.x,1))%>%
-  str_remove('OrganoidDataset_')%>%
+  str_remove('.+?Dataset_')%>%
   str_remove('_mse.csv')
 
-organoid_mse_data <- 
-  map2_dfr(organoid_files, models, 
-           ~.x%>%read_csv()%>%mutate(model=.y)%>%rename(id=1))
-
-organoid_mse_data%>%
-  select(-id)%>%
-  group_by(model)%>%
-  summarise_all(mean)%>%
-  pivot_longer(names_to='AB',values_to ='MSE',-model)%>%
-  ggplot(aes(y=AB,x=MSE,fill = model))+
-  scale_fill_viridis(discrete = T)+
-  geom_bar(position="dodge", stat="identity")
-
-result_plot_dir = '/data/PycharmProjects/cytof_benchmark/results/mse'
-
-ggsave(file.path(result_plot_dir,paste0('organoid_AB.png')),
-       width=8, height=8, dpi=300)
-
-mses <- organoid_mse_data%>%
-  select(-id)%>%
-  nest_by(model)%>%
-  mutate(mse = list(rowMeans(as.matrix(data))))
-
-corr_data = data.frame(model1=c(),model2=c(),spearman=c())
-for (model1 in mses$model){
-  for (model2 in mses$model){
-    corr_data<-corr_data%>%rbind(
-      data.frame(model1=model1,model2=model2,
-              spearman=cor(
-                mses%>%filter(model==model1)%>%pull(mse)%>%.[[1]],
-                mses%>%filter(model==model2)%>%pull(mse)%>%.[[1]])
-      ))
-  }
-}
-
-corr_data%>%
-  filter(model1!=model2)%>%
-  write_csv(file.path(result_plot_dir,'organoid_cell_correlation.csv'))
-
-### CAF dataset
-caf_files = mse_files[str_detect(mse_files,'CafDataset')]
-models = str_split(caf_files,'/')%>%
+datasets <- str_split(mse_files,'/')%>%
   map_chr(~tail(.x,1))%>%
-  str_remove('CafDataset_')%>%
-  str_remove('_mse.csv')
+  str_extract('.+?Dataset')
 
-caf_mse_data <- 
-  map2_dfr(caf_files, models, 
-           ~.x%>%read_csv()%>%mutate(model=.y)%>%rename(id=1))
+mse_vae_data<-
+  pmap_dfr(list(file = mse_files, model=models, dataset=datasets),
+     function(file,model,dataset){
+       read_csv(file)%>%
+         select(-1)%>%
+         summarise_all(mean)%>%
+         pivot_longer(names_to='biomarker',values_to ='mse_vae',cols=everything())%>%
+         mutate(model=model,dataset=dataset)
+       }
+     )
 
-caf_mse_data%>%
-  select(-id)%>%
-  group_by(model)%>%
-  summarise_all(mean)%>%
-  pivot_longer(names_to='AB',values_to ='MSE',-model)%>%
-  ggplot(aes(y=AB,x=MSE,fill = model))+
+mse_pca_data<-read_csv(pca_data_dir)%>%
+  left_join(mse_vae_data)%>%
+  arrange(dataset,biomarker,model)
+
+pc_equiv_data<-mse_pca_data%>%
+  group_by(biomarker,dataset,model)%>%
+  mutate(prev_pc_mask = mse == min(mse[mse>=mse_vae]),
+         next_pc_mask = mse == max(mse[mse<=mse_vae]))%>%
+  filter(prev_pc_mask | next_pc_mask)%>%
+  mutate(prev_pc = pc[prev_pc_mask],next_pc = pc[next_pc_mask],
+         prev_mse = mse[prev_pc_mask],next_mse = mse[next_pc_mask])%>%
+  mutate(approx_pc_eqiv = prev_pc+(prev_mse-mse_vae)/(prev_mse-next_mse))%>%
+  select(biomarker,mse_vae,dataset,model,approx_pc_eqiv)%>%
+  distinct()%>%
+  ungroup()
+
+pc_equiv_data%>%
+  ggplot(aes(y=biomarker,x=approx_pc_eqiv,fill = model))+
   scale_fill_viridis(discrete = T)+
-  geom_bar(position="dodge", stat="identity")
+  geom_bar(position="dodge", stat="identity")+
+  facet_wrap(~dataset,scales = 'free_y')
 
-result_plot_dir = '/data/PycharmProjects/cytof_benchmark/results/mse'
+ggsave(file.path(output_dir,paste0('mse_pca_equiv.png')),
+       width=12, height=8, dpi=100)
 
-ggsave(file.path(result_plot_dir,paste0('caf_AB.png')),
-       width=8, height=8, dpi=300)
-
-mses <- caf_mse_data%>%
-  select(-id)%>%
-  nest_by(model)%>%
-  mutate(mse = list(rowMeans(as.matrix(data))))
-
-corr_data = data.frame(model1=c(),model2=c(),spearman=c())
-for (model1 in mses$model){
-  for (model2 in mses$model){
-    corr_data<-corr_data%>%rbind(
-      data.frame(model1=model1,model2=model2,
-                 spearman=cor(
-                   mses%>%filter(model==model1)%>%pull(mse)%>%.[[1]],
-                   mses%>%filter(model==model2)%>%pull(mse)%>%.[[1]])
-      ))
-  }
-}
-
-corr_data%>%
-  filter(model1!=model2)%>%
-  write_csv(file.path(result_plot_dir,'caf_cell_correlation.csv'))
-
-
-### Breast Cancer Challenge Dataset
-challenge_files = mse_files[str_detect(mse_files,'ChallengeDataset')]
-models = str_split(challenge_files,'/')%>%
-  map_chr(~tail(.x,1))%>%
-  str_remove('ChallengeDataset_')%>%
-  str_remove('_mse.csv')
-
-challenge_mse_data <- 
-  map2_dfr(challenge_files, models, 
-           ~.x%>%read_csv()%>%mutate(model=.y)%>%rename(id=1))
-
-challenge_mse_data%>%
-  select(-id)%>%
-  group_by(model)%>%
-  summarise_all(mean)%>%
-  pivot_longer(names_to='AB',values_to ='MSE',-model)%>%
-  ggplot(aes(y=AB,x=MSE,fill = model))+
+pc_equiv_data%>%
+  ggplot(aes(y=biomarker,x=mse_vae,fill = model))+
   scale_fill_viridis(discrete = T)+
-  geom_bar(position="dodge", stat="identity")
+  geom_bar(position="dodge", stat="identity")+
+  facet_wrap(~dataset,scales = 'free')
 
-result_plot_dir = '/data/PycharmProjects/cytof_benchmark/results/mse'
-
-ggsave(file.path(result_plot_dir,paste0('challenge_AB.png')),
-       width=8, height=8, dpi=300)
-
-mses <- challenge_mse_data%>%
-  select(-id)%>%
-  nest_by(model)%>%
-  mutate(mse = list(rowMeans(as.matrix(data))))
-
-corr_data = data.frame(model1=c(),model2=c(),spearman=c())
-for (model1 in mses$model){
-  for (model2 in mses$model){
-    corr_data<-corr_data%>%rbind(
-      data.frame(model1=model1,model2=model2,
-                 spearman=cor(
-                   mses%>%filter(model==model1)%>%pull(mse)%>%.[[1]],
-                   mses%>%filter(model==model2)%>%pull(mse)%>%.[[1]])
-      ))
-  }
-}
-
-corr_data%>%
-  filter(model1!=model2)%>%
-  write_csv(file.path(result_plot_dir,'challenge_cell_correlation.csv'))
+ggsave(file.path(output_dir,paste0('mse.png')),
+       width=12, height=8, dpi=100)

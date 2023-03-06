@@ -13,7 +13,7 @@ class ReZero(torch.nn.Module):
         self.layers = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim),
             nn.BatchNorm1d(hidden_dim),
-            nn.ReLU(inplace=True),
+            nn.LeakyReLU(inplace=True),
         )
         self.alpha = nn.Parameter(torch.tensor(0.0))
 
@@ -32,7 +32,7 @@ class ResidualStack(torch.nn.Module):
 
 
 class Encoder(torch.nn.Module):
-    def __init__(self, input_dim: int, hidden_dim: int, n_layers:int) -> None:
+    def __init__(self, input_dim: int, hidden_dim: int, n_layers: int) -> None:
         super(Encoder, self).__init__()
 
         self.input_dim = input_dim
@@ -51,7 +51,7 @@ class Encoder(torch.nn.Module):
 
 
 class Decoder(torch.nn.Module):
-    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, n_layers:int) -> None:
+    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, n_layers: int) -> None:
         super(Decoder, self).__init__()
 
         self.input_dim = input_dim
@@ -122,20 +122,21 @@ class VQVAE(BaseVAE):
     def __init__(self, config: config_dict.ConfigDict) -> None:
         super(VQVAE, self).__init__()
 
-        self.encoder = Encoder(input_dim=config.in_features, hidden_dim=config.hidden_features, n_layers=config.n_layers)
+        self.encoder = Encoder(input_dim=config.in_features, hidden_dim=config.hidden_features,
+                               n_layers=config.n_layers)
         self.codebook1 = CodeLayer(in_features=config.hidden_features,
                                    embed_dim=config.embed_dim1,
                                    embed_entries=config.embed_entries1,
                                    temperature=config.temperature,
                                    kld_scale=config.kld_scale,
                                    straight_through=config.straight_through)
-        self.codebook2 = CodeLayer(in_features=config.hidden_features+config.in_features,
+        self.codebook2 = CodeLayer(in_features=config.hidden_features + config.in_features,
                                    embed_dim=config.embed_dim2,
                                    embed_entries=config.embed_entries2,
                                    temperature=config.temperature,
                                    kld_scale=config.kld_scale,
                                    straight_through=config.straight_through)
-        self.codebook3 = CodeLayer(in_features=config.hidden_features+config.in_features,
+        self.codebook3 = CodeLayer(in_features=config.hidden_features + config.in_features,
                                    embed_dim=config.embed_dim3,
                                    embed_entries=config.embed_entries3,
                                    temperature=config.temperature,
@@ -147,12 +148,12 @@ class VQVAE(BaseVAE):
                                 output_dim=config.in_features,
                                 n_layers=config.n_layers)
 
-        self.decoder2 = Decoder(input_dim=config.embed_dim2+config.embed_dim1,
+        self.decoder2 = Decoder(input_dim=config.embed_dim2 + config.embed_dim1,
                                 hidden_dim=config.hidden_features,
                                 output_dim=config.in_features,
                                 n_layers=config.n_layers)
 
-        self.decoder3 = Decoder(input_dim=config.embed_dim3+config.embed_dim2,
+        self.decoder3 = Decoder(input_dim=config.embed_dim3 + config.embed_dim2,
                                 hidden_dim=config.hidden_features,
                                 output_dim=config.in_features,
                                 n_layers=config.n_layers)
@@ -169,7 +170,7 @@ class VQVAE(BaseVAE):
         code_q3, code_d3, emb_id3 = self.codebook3(torch.cat([encoder_output, decoder_output2], axis=1))
         decoder_output3 = self.decoder3(torch.cat([code_q3, code_q2], axis=1))
 
-        return decoder_output3, x, [code_d1,code_d2,code_d3], encoder_output, [emb_id1, emb_id2, emb_id3]
+        return decoder_output3, x, [code_d1, code_d2, code_d3], encoder_output, [emb_id1, emb_id2, emb_id3]
 
     def loss_function(self, *args) -> dict:
         recons = args[0]

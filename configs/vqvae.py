@@ -11,7 +11,7 @@ def get_config():
     config.output_dir = './logs/VQVAE/'
     # VAE architecture parameters
     config.in_features = 41
-    config.hidden_features = 32
+    config.hidden_features = 64
 
     config.embed_dim1 = 2
     config.embed_entries1 = 16

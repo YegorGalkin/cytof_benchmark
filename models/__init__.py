@@ -2,6 +2,7 @@ from .base import *
 from .beta_vae import *
 from .wae_mmd import *
 from .hyperspherical_vae import *
+from .vqvae import *
 
 # Aliases
 VAE = BetaVAE
