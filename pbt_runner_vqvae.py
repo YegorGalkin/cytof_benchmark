@@ -13,6 +13,7 @@ from ray.air import session, Checkpoint
 from ray.tune.schedulers import PopulationBasedTraining
 import time
 
+from torch import autocast
 from torch.utils.data import TensorDataset, DataLoader
 
 import datasets
@@ -24,8 +25,9 @@ def train(model, config, optimizer, train_dataloader):
         X_batch = X_batch[0].flatten(end_dim=1).to(config.device, non_blocking=True)
         optimizer.zero_grad()
         model.train()
-        outputs = model.forward(X_batch)
-        loss = model.loss_function(*outputs)
+        with autocast(device_type='cuda', dtype=torch.bfloat16):
+            outputs = model.forward(X_batch)
+            loss = model.loss_function(*outputs)
         loss['loss'].backward()
         optimizer.step()
 
@@ -35,9 +37,11 @@ def test(model, config, val_dataloader, na_replace=10):
         model.eval()
         metrics = dict()
         for X_batch in val_dataloader:
-            X_batch = X_batch[0].flatten(end_dim=1).to(config.device, non_blocking=True)
-            outputs = model.forward(X_batch)
-            losses = model.loss_function(*outputs)
+            with autocast(device_type='cuda', dtype=torch.bfloat16):
+                X_batch = X_batch[0].flatten(end_dim=1).to(config.device, non_blocking=True)
+                outputs = model.forward(X_batch)
+                losses = model.loss_function(*outputs)
+
             for key in losses.keys():
                 metrics[key] = metrics.get(key, []) + [losses[key].to('cpu').numpy().item()]
             metrics['batch_size'] = metrics.get('batch_size', []) + [X_batch.shape[0]]
