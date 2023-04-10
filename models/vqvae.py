@@ -13,7 +13,7 @@ class ReZero(torch.nn.Module):
         self.layers = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim),
             nn.BatchNorm1d(hidden_dim),
-            nn.LeakyReLU(inplace=True),
+            nn.ReLU(inplace=True),
         )
         self.alpha = nn.Parameter(torch.tensor(0.0))
 
@@ -170,7 +170,21 @@ class VQVAE(BaseVAE):
         code_q3, code_d3, emb_id3 = self.codebook3(torch.cat([encoder_output, decoder_output2], axis=1))
         decoder_output3 = self.decoder3(torch.cat([code_q3, code_q2], axis=1))
 
-        return decoder_output3, x, [code_d1, code_d2, code_d3], encoder_output, [emb_id1, emb_id2, emb_id3]
+        return decoder_output3, x, [code_d1, code_d2, code_d3]
+
+    def forward_debug(self, x):
+        encoder_output = self.encoder(x)
+        code_q1, code_d1, emb_id1 = self.codebook1(encoder_output)
+        decoder_output1 = self.decoder1(code_q1)
+
+        code_q2, code_d2, emb_id2 = self.codebook2(torch.cat([encoder_output, decoder_output1], axis=1))
+        decoder_output2 = self.decoder2(torch.cat([code_q2, code_q1], axis=1))
+
+        code_q3, code_d3, emb_id3 = self.codebook3(torch.cat([encoder_output, decoder_output2], axis=1))
+        decoder_output3 = self.decoder3(torch.cat([code_q3, code_q2], axis=1))
+
+        return decoder_output3, x, [code_d1, code_d2, code_d3], encoder_output, [emb_id1, emb_id2, emb_id3], \
+            [decoder_output1.detach(), decoder_output2.detach(), decoder_output3.detach()]
 
     def loss_function(self, *args) -> dict:
         recons = args[0]
