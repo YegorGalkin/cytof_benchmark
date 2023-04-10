@@ -4,29 +4,68 @@ library(viridis)
 
 data_dir = '/data/PycharmProjects/cytof_benchmark/results/mse_data'
 pca_data_dir = '/data/PycharmProjects/cytof_benchmark/results/pca_data/biomarker_mse.csv'
-mse_files = list.files(data_dir,pattern = "*mse.csv",full.names = TRUE)
+mse_files = list.files(data_dir,pattern = "*.csv",recursive=TRUE,full.names = TRUE)
 
-output_dir = '/data/PycharmProjects/cytof_benchmark/results/mse'
+output_dir = '/data/PycharmProjects/cytof_benchmark/results/mse_plots'
 
-models <- str_split(mse_files,'/')%>%
-  map_chr(~tail(.x,1))%>%
-  str_remove('.+?Dataset_')%>%
-  str_remove('_mse.csv')
+splits <- str_split(mse_files,'/')%>%
+  map_chr(~.x[10])%>%
+  str_remove('.csv')
 
 datasets <- str_split(mse_files,'/')%>%
-  map_chr(~tail(.x,1))%>%
-  str_extract('.+?Dataset')
+  map_chr(~.x[9])
+
+models <- str_split(mse_files,'/')%>%
+  map_chr(~.x[8])
+
+dims <- str_split(mse_files,'/')%>%
+  map_chr(~.x[7])
 
 mse_vae_data<-
-  pmap_dfr(list(file = mse_files, model=models, dataset=datasets),
-     function(file,model,dataset){
+  pmap_dfr(list(file = mse_files, 
+                model=models, 
+                dataset=datasets,
+                dim = dims,
+                split = splits),
+     function(file,model,dataset,dim,split){
        read_csv(file)%>%
          select(-1)%>%
          summarise_all(mean)%>%
          pivot_longer(names_to='biomarker',values_to ='mse_vae',cols=everything())%>%
-         mutate(model=model,dataset=dataset)
+         mutate(model=model,dataset=dataset,dim=dim,split=split)
        }
      )
+
+mse_vae_data%>%
+  mutate(dim = as.integer(str_remove(dim,'dim')))%>%
+  group_by(model,dataset,dim,split)%>%
+  filter(split=='test')%>%
+  summarise(mse_vae=mean(mse_vae))%>%
+  ungroup()%>%
+  ggplot(aes(x=dim,y=mse_vae,color = model))+
+  geom_point()+
+  geom_line()+
+  scale_x_continuous(breaks=c(2,3,5))+
+  facet_wrap(~dataset,scales = 'free_y',ncol=3)+
+  labs(x='Latent layer dimensionality',y='MSE',color='Model')
+
+ggsave(file.path(output_dir,paste0('mse_per_dim.png')),
+       width=12, height=4, dpi=100)
+
+mse_vae_data%>%
+  group_by(model,dataset,dim,split)%>%
+  summarise(mse_vae=mean(mse_vae))%>%
+  pivot_wider(names_from=split,values_from = mse_vae)%>%
+  mutate(percent_gain_train = ((train-val)/val)*100,
+         percent_gain_test = ((test-val)/val)*100)%>%
+  ungroup()%>%
+  summarise(median_train = median(percent_gain_train),
+            min_train = min(percent_gain_train),
+            max_train = max(percent_gain_train),
+            median_test = median(percent_gain_test),
+            min_test = min(percent_gain_test),
+            max_test = max(percent_gain_test),
+            )
 
 mse_pca_data<-read_csv(pca_data_dir)%>%
   left_join(mse_vae_data)%>%
