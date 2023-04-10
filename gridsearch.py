@@ -2,6 +2,7 @@ import os
 from itertools import product
 from multiprocessing import Pool
 
+N_GPUS = 2
 
 def experiment_1():
     hidden_dims = ['"(41,41,41,41,41)"', '"(64,64,64,64,64)"', '"(128,128,128,128,128)"', '"(256,256,256,256,256)"']
@@ -19,7 +20,7 @@ def experiment_1():
                             f'--config.latent_dim={ldim} '
                             f'--config.batch_size=16384 '
                             f'--config.max_grad_norm=1 '
-                            f'--config.device=cuda:{i % 2} ')
+                            f'--config.device=cuda:{i % N_GPUS} ')
         pool.map(os.system, commands)
 
 
@@ -39,7 +40,7 @@ def experiment_2():
                             f'--config.activation={act} '
                             f'--config.batch_size=16384 '
                             f'--config.max_grad_norm={mgn} '
-                            f'--config.device=cuda:{i % 2} ')
+                            f'--config.device=cuda:{i % N_GPUS} ')
         pool.map(os.system, commands)
 
 
@@ -56,7 +57,7 @@ def experiment_3():
                             f'--config.learning_rate=0.005 '
                             f'--config.epochs=3000 '
                             f'--config.batch_size=16384 '
-                            f'--config.device=cuda:{i % 2} ')
+                            f'--config.device=cuda:{i % N_GPUS} ')
         pool.map(os.system, commands)
 
 
@@ -73,7 +74,7 @@ def experiment_4():
                             f'--config.epochs={ep} '
                             f'--config.batch_size=16384 '
                             f'--config.max_grad_norm=1 '
-                            f'--config.device=cuda:{i % 2} ')
+                            f'--config.device=cuda:{i % N_GPUS} ')
         pool.map(os.system, commands)
 
 
@@ -90,7 +91,7 @@ def experiment_5():
                             f'--config.learning_rate=0.001 '
                             f'--config.epochs=3000 '
                             f'--config.batch_size=16384 '
-                            f'--config.device=cuda:{i % 2} ')
+                            f'--config.device=cuda:{i % N_GPUS} ')
         pool.map(os.system, commands)
 
 
@@ -108,7 +109,7 @@ def experiment_6():
                             f'--config.epochs=3000 '
                             f'--config.activation=GELU '
                             f'--config.batch_size=16384 '
-                            f'--config.device=cuda:{i % 2} ')
+                            f'--config.device=cuda:{i % N_GPUS} ')
         pool.map(os.system, commands)
 
 
@@ -126,7 +127,7 @@ def experiment_7():
                             f'--config.epochs=3000 '
                             f'--config.activation=SiLU '
                             f'--config.batch_size=16384 '
-                            f'--config.device=cuda:{i % 2} ')
+                            f'--config.device=cuda:{i % N_GPUS} ')
         pool.map(os.system, commands)
 
 

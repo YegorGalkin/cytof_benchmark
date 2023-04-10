@@ -1,0 +1,2 @@
+Add bias = false to all linear layers before batch norm.
+Extract linear, residual and rezero stacks to the base model file.
