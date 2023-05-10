@@ -1,10 +1,25 @@
-library(tidyverse)
+#!/usr/bin/env Rscript
+
+if(!require(tidyverse)){
+  install.packages("tidyverse")
+  library(tidyverse)
+}
+
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+BiocManager::install("flowCore")
 library(flowCore)
-library(data.table)
 
-setwd('D:/Rstuff/organoids')
+if(!require(data.table)){
+  install.packages("data.table")
+  library(data.table)
+}
 
-fcs_folder <- './experiment_83654_20221005115016593_files'
+args<-commandArgs(TRUE)
+
+fcs_folder <- args[1]
+output_dir <- args[2]
 
 fcs_filenames <- list.files(fcs_folder)
 
@@ -28,22 +43,22 @@ expression_data <- fcss %>%
   select(id,everything())%>%
   as.data.table()
 
-dir.create('./results')
-dir.create('./results/full/')
-dir.create('./results/reduced/')
+dir.create(file.path(output_dir,'data'))
+dir.create(file.path(output_dir,'data','full'))
+dir.create(file.path(output_dir,'data','reduced'))
 
 expression_data %>%
-  data.table::fwrite('results/full/data.csv.gz')
+  data.table::fwrite(file.path(output_dir,'data','full','data.csv.gz'))
 
 pheno_data%>%
-  data.table::fwrite('results/full/metadata.csv.gz')
+  data.table::fwrite(file.path(output_dir,'data','full','metadata.csv.gz'))
 
 idx <- sample(1:nrow(expression_data), 10000)
 
 expression_data%>%
   dplyr::filter(row_number() %in% idx)%>%
-  data.table::fwrite('results/reduced/data_reduced.csv')
+  data.table::fwrite(file.path(output_dir,'data','reduced','data_reduced.csv.gz'))
 
 pheno_data%>%
   dplyr::filter(row_number() %in% idx)%>%
-  data.table::fwrite('results/reduced/metadata_reduced.csv')
+  data.table::fwrite(file.path(output_dir,'data','reduced','metadata_reduced.csv.gz'))
