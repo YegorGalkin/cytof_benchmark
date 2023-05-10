@@ -47,10 +47,11 @@ mse_vae_data%>%
   geom_line()+
   scale_x_continuous(breaks=c(2,3,5))+
   facet_wrap(~dataset,scales = 'free_y',ncol=3)+
-  labs(x='Latent layer dimensionality',y='MSE',color='Model')
+  labs(x='Latent layer dimensionality',y='MSE',color='Model')+
+  theme(legend.position="bottom")
 
 ggsave(file.path(output_dir,paste0('mse_per_dim.png')),
-       width=12, height=4, dpi=100)
+       width=10, height=5, dpi=100)
 
 mse_vae_data%>%
   group_by(model,dataset,dim,split)%>%

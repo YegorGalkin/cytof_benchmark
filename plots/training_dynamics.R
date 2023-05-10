@@ -1,6 +1,6 @@
 library(tidyverse)
 library(ggpubr)
-data_file = '/data/PycharmProjects/cytof_benchmark/results/benchmark_loss_dynamics.csv'
+data_file = '/data/PycharmProjects/cytof_benchmark/results/deprecated/benchmark_loss_dynamics.csv'
 
 result_plot_dir = '/data/PycharmProjects/cytof_benchmark/results/training_dynamics'
 

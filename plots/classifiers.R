@@ -33,7 +33,8 @@ ggplot(latents,aes(x = dim, y = test_acc))+
                                 'Majority class','PCA','All variables'))+
   scale_x_continuous(breaks=c(2,3,5))+
   labs(x='Latent space dimensionality',y='Test set accuracy (LightGBM)',color='Model',
-       title = 'Clasiffier accuracy for predicting metadata using latent space embeddings across datasets.')
+       title = 'Clasiffier accuracy for predicting metadata using latent space embeddings across datasets.')+
+  theme(legend.position="bottom")
 
 ggsave(file.path(output_dir,paste0('classifier_acc.png')),
-       width=9, height=6, dpi=100)
+       width=10, height=8, dpi=100)

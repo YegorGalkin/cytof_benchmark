@@ -48,22 +48,28 @@ mse_summary<-loss_curves%>%
   mutate(depth=as.integer(depth),width=as.integer(width),epochs=as.integer(epochs))%>%
   add_row(experiment='pbt',val_MSE=0.2974060810448831,width=256,epochs=5600,depth=5)
 
-ggplot(mse_summary,aes(x=experiment,y=val_MSE-0.29,fill=experiment))+
+p1 = ggplot(mse_summary%>%mutate(experiment=str_remove(experiment,'exp_')),aes(x=experiment,y=val_MSE-0.29,fill=experiment))+
   geom_bar(position="dodge", stat="identity")+
   scale_y_continuous(limits = c(0,0.03), breaks=seq(0,0.03,0.005),
-                     labels=seq(0.29,0.32,0.005))+
-  scale_fill_discrete(labels = c('20 total, (3k,256,5)',
-                                 '18 total, (3k,128,5)',
-                                 '8 total, (3k,256,5)',
-                                 '5 total, (20k,256,5)',
-                                 '5 total, (3k,1024,5)',
-                                 '4 total, (3k,512,5)',
-                                 '4 total, (3k,256,5)',
-                                 '16 total, (5.6k,256,5)'))+
+                     labels=seq(0.29,0.32,0.005))+ 
+  guides(fill='none')+
   labs(x='Experiment',y='Validation MSE',
        fill = 'Number of experiments,\nbest hyperparameters\n(epochs,width,depth)',
-       title='Summary of hyperparameter tuning',
-       subtitle = 'with BetaVAE on Organoid dataset')
+       title='Experiment summary',
+       subtitle = 'with BetaVAE model trained on Organoid dataset')
+
+
+p2 = ggpubr::ggtexttable(
+  data.frame(Exp. = c(1:7,'pbt'),
+             N     =c(20  ,18  ,8   ,5    ,5   ,4   ,4   ,16),
+             epochs=c('3k','3k','3k','20k','3k','3k','3k','5.6k'),
+             width =c(256 ,128 ,256 ,256  ,1024,512 ,256 ,256),
+             depth = 5),
+  rows = NULL, theme = ttheme("mBlue")
+)%>%
+  tab_add_title(text = "Best run hyperparameters")
+
+ggpubr::ggarrange(p1,p2)
 
 ggsave(file.path(result_plot_dir,paste0('summary_mse.png')),
-       width=6, height=6, dpi=100)
+       width=8, height=4, dpi=100)

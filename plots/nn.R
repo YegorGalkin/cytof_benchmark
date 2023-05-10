@@ -2,18 +2,15 @@ library(tidyverse)
 library(RANN)
 library(data.table)
 
-data_dir <- '/data/PycharmProjects/cytof_benchmark/results/latent_data'
-latent_files <- list.files(data_dir,pattern = "*val_latent.csv",full.names = TRUE)
+data_dir <- '/data/PycharmProjects/cytof_benchmark/results/latent_data/dim2/'
+latent_files <- list.files(data_dir,pattern = "*test.csv",full.names = TRUE,recursive = TRUE)
 output_dir <- '/data/PycharmProjects/cytof_benchmark/results/nn_plots'
 
 models <- str_split(latent_files,'/')%>%
-  map_chr(~tail(.x,1))%>%
-  str_remove('.+?Dataset_')%>%
-  str_remove('_val_latent.csv')
+  map_chr(~.x[9])
 
 datasets <- str_split(latent_files,'/')%>%
-  map_chr(~tail(.x,1))%>%
-  str_extract('.+?Dataset')
+  map_chr(~.x[10])
 
 latents <- tibble(model=models,
                   dataset=datasets,
@@ -79,8 +76,9 @@ results%>%
   scale_x_log10()+
   labs(x = "Nearest neighbourhood size", 
        y = "Nearest neighbourhood intersection", 
-       title = "Organoid Dataset: BetaVAE vs DbetaVAE average neighbourhood intersection sizes")+
-  facet_wrap(~dataset,nrow=3)
+       title = "Correspondence of nearest neighbourhoods between different models in all datasets")+
+  facet_wrap(~dataset,ncol=3)+
+  theme(legend.position="bottom")
 
 ggsave(file.path(output_dir,paste0('nn.png')),
-       width=12, height=8, dpi=100)
+       width=12, height=6, dpi=100)
