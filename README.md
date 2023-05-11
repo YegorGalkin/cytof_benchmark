@@ -1,11 +1,9 @@
 # Table of contents
 1. [Requirements](#requirements)
 2. [Installation guide](#install)
-2. [Data download](#download)
-2. [Preprocessing](#preprocessing)
-3. [Exploratory data analysis](#eda)
-4. [Simple network training](#training)
-5. [Batch network training with gridsearch](#gridsearch)
+3. [Data download](#download)
+4. [Preprocessing](#preprocessing)
+5. [Simple network training](#training)
 6. [HPO with population based training](#pbt)
 
 ## Requirements <a name="requirements"/>
@@ -81,11 +79,39 @@ Sourced from [Single Cell Signaling in Breast Cancer Challenge](https://www.syna
 ## Preprocessing <a name="preprocessing"/>
 All datasets required different preprocessing pipelines, which are implemented in the `datasets.py` file.  
 FACS data required normalization using `arcsinh(x/5)`, and some NAs were filtered.
-## Exploratory data analysis <a name="eda"/>
-
 ## Training a single network <a name="training"/>
+There is an example notebook that shows how to run neural network training step by step in the `examples/training.ipynb`.
+It is also possible to use `experiment.py` script to train networks with specific parameters. It currently only works for the Organoid dataset.
+This script uses cosine decay learning rate scheduler. The following parameters could be changed:
+1. Output directory
+2. Model (BetaVAE, db-VAE, WAE-MMD, S-VAE)
+3. Batch size
+4. Number of epochs
+5. Maximum learning rate for the scheduler
+6. Maximum gradient norm for the gradient clipping
+7. Number of latent dimensions
+8. Size and number of hidden layers
+9. Activation function
+10. Random seed
 
-## Training multiple networks with gridsearch <a name="gridsearch"/>
+Example running scripts are available in the file `gridsearch.py`
 
 ## Hyperparameter optimization with population based training <a name="pbt"/>
+`benchmark.py` has the code to run the population based training HPO for all 4 models and 3 datasets with 16 models in population for 8 hours each for a total of 4 day runtime.
+It also provides an example of how to run population based training.
+Important parameters that have to be changed depending on hardware, described in `configs/pbt/base_pbt.py`:
+1. `gpus` - set to a number of gpus in system
+2. `cpus` - set to a number of cpus in system
+3. `concurrent` - if less than 24 GB VRAM, set to 8 or 4, while also setting `synch=True`.  
+   This will force models to unload after each tuning iteration, until all 16 models complete a single tuning loop. In this case, HPO could take more time to complete.
+4. `soft_time_limit` will set time limit, after which models will try to finish the last tuning iteration and terminate the HPO run.
 
+The following parameters change behavior of the population based training itself:
+1. `perturbation_interval` - Number of epochs to complete a single tuning iteration.
+2. `perturbation_factors` - How metaparameters are changed during PBT perturbations
+3. `lr_lower`, `lr_upper`, `bs_lower`, `bs_upper` - limits for the model metaparameters. `bs_lower` and `bs_upper` are hard limits depending on GPU VRAM.
+4. `group_size` - Since a single sample only has ~ 40 features, they are minibatched in a group of such size to reduce data loader overhead. Data Loader considers `group_size` number of samples as a single item
+5. `max_failures` - Ray Air will retry model trainign in case of errors, and terminate if amount of errors exceeds this value
+
+The rest of parameters are model-specific and dataset-specific.  
+Example usage is available in the file `benchmark.py`
