@@ -78,8 +78,7 @@ class WAE_MMD(BaseVAE):
         return [self.decode(z), input, z]
 
     def loss_function(self,
-                      *args,
-                      epoch: int = 0) -> dict:
+                      *args) -> dict:
         recons = args[0]
         input = args[1]
         z = args[2]

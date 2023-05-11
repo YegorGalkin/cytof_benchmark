@@ -71,7 +71,7 @@ def main(_):
             optimizer.zero_grad()
             model.train()
             outputs = model.forward(X_batch)
-            loss = model.loss_function(*outputs, epoch=epoch)
+            loss = model.loss_function(*outputs)
 
             loss['loss'].backward()
             if not math.isinf(config.max_grad_norm):
@@ -86,7 +86,7 @@ def main(_):
                 for X_batch in X_train_batches:
                     loss_dict = dict()
                     outputs = model.forward(X_batch)
-                    loss_train = model.loss_function(*outputs, epoch=epoch)
+                    loss_train = model.loss_function(*outputs)
                     for key in loss_train.keys():
                         loss_dict['train_' + key] = loss_train[key].to('cpu').numpy().item() * X_batch.shape[0]
                     train_losses.append(loss_dict)
@@ -95,7 +95,7 @@ def main(_):
                 for X_batch in X_val_batches:
                     loss_dict = dict()
                     outputs = model.forward(X_batch)
-                    loss_val = model.loss_function(*outputs, epoch=epoch)
+                    loss_val = model.loss_function(*outputs)
                     for key in loss_val.keys():
                         loss_dict['val_' + key] = loss_val[key].to('cpu').numpy().item() * X_batch.shape[0]
                     val_losses.append(loss_dict)
