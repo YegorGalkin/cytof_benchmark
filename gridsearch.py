@@ -4,6 +4,7 @@ from multiprocessing import Pool
 
 N_GPUS = 2
 
+
 def experiment_1():
     hidden_dims = ['"(41,41,41,41,41)"', '"(64,64,64,64,64)"', '"(128,128,128,128,128)"', '"(256,256,256,256,256)"']
     learning_rates = [0.003, 0.004, 0.005, 0.006, 0.007]

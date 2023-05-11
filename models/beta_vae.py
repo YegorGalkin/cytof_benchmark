@@ -102,12 +102,10 @@ class BetaVAE(BaseVAE):
         return [self.decode(z), input, mu, log_var]
 
     def loss_function(self,
-                      *args,
-                      epoch: int = 0) -> dict:
+                      *args) -> dict:
         r"""
         Computes the VAE loss function.
         KL(N(\mu, \sigma), N(0, 1)) = \log \frac{1}{\sigma} + \frac{\sigma^2 + \mu^2}{2} - \frac{1}{2}
-        :param epoch: current epoch
         :param args:
         :return:
         """
