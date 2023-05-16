@@ -44,21 +44,22 @@ expression_data <- fcss %>%
   as.data.table()
 
 dir.create(file.path(output_dir,'data'))
-dir.create(file.path(output_dir,'data','full'))
-dir.create(file.path(output_dir,'data','reduced'))
+dir.create(file.path(output_dir,'data','organoids'))
+dir.create(file.path(output_dir,'data','organoids','full'))
+dir.create(file.path(output_dir,'data','organoids','reduced'))
 
 expression_data %>%
-  data.table::fwrite(file.path(output_dir,'data','full','data.csv.gz'))
+  data.table::fwrite(file.path(output_dir,'data','organoids','full','data.csv.gz'))
 
 pheno_data%>%
-  data.table::fwrite(file.path(output_dir,'data','full','metadata.csv.gz'))
+  data.table::fwrite(file.path(output_dir,'data','organoids','full','metadata.csv.gz'))
 
 idx <- sample(1:nrow(expression_data), 10000)
 
 expression_data%>%
   dplyr::filter(row_number() %in% idx)%>%
-  data.table::fwrite(file.path(output_dir,'data','reduced','data_reduced.csv.gz'))
+  data.table::fwrite(file.path(output_dir,'data','organoids','reduced','data_reduced.csv.gz'))
 
 pheno_data%>%
   dplyr::filter(row_number() %in% idx)%>%
-  data.table::fwrite(file.path(output_dir,'data','reduced','metadata_reduced.csv.gz'))
+  data.table::fwrite(file.path(output_dir,'data','organoids','reduced','metadata_reduced.csv.gz'))
