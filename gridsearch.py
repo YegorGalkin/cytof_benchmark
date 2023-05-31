@@ -132,5 +132,47 @@ def experiment_7():
         pool.map(os.system, commands)
 
 
+def experiment_8():
+    layers = [2, 4, 6, 8, 16]
+    widths = [2 ** 4, 2 ** 5, 2 ** 6]
+    embed_params = [(256, 1, 2), (256, 1, 4), (256, 1, 8), (8, 2, 2), (8, 2, 4), (2, 8, 1)]
+    with Pool(processes=4) as pool:
+        commands = []
+        for i, (layer, hdim, (embed_entries, embed_channels, embed_dim)) in enumerate(
+                product(layers, widths, embed_params)):
+            commands.append(f'python3 /data/PycharmProjects/cytof_benchmark/experiment_vqvae.py '
+                            f'--config=configs/vqvae.py '
+                            f'--config.output_dir=logs/VQVAE/exp_8/ '
+                            f'--config.n_layers={layer} '
+                            f'--config.hidden_features={hdim} '
+                            f'--config.embed_entries={embed_entries} '
+                            f'--config.embed_channels={embed_channels} '
+                            f'--config.embed_dim={embed_dim} '
+                            f'--config.epochs=500 '
+                            f'--config.device=cuda:{i % N_GPUS} ')
+        pool.map(os.system, commands)
+
+
+def experiment_9():
+    layers = [6, 8, 2, 2, 2, 2]
+    widths = [64, 32, 16, 32, 32, 32]
+    embed_params = [(256, 1, 2), (256, 1, 4), (256, 1, 8), (8, 2, 2), (8, 2, 4), (2, 8, 1)]
+    with Pool(processes=6) as pool:
+        commands = []
+        for i, (layer, hdim, (embed_entries, embed_channels, embed_dim)) in enumerate(
+                zip(layers, widths, embed_params)):
+            commands.append(f'python3 /data/PycharmProjects/cytof_benchmark/experiment_vqvae.py '
+                            f'--config=configs/vqvae.py '
+                            f'--config.output_dir=logs/VQVAE/exp_9/ '
+                            f'--config.n_layers={layer} '
+                            f'--config.hidden_features={hdim} '
+                            f'--config.embed_entries={embed_entries} '
+                            f'--config.embed_channels={embed_channels} '
+                            f'--config.embed_dim={embed_dim} '
+                            f'--config.epochs=5000 '
+                            f'--config.device=cuda:{i % N_GPUS} ')
+        pool.map(os.system, commands)
+
+
 if __name__ == '__main__':
-    experiment_7()
+    experiment_9()

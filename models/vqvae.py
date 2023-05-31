@@ -124,67 +124,34 @@ class VQVAE(BaseVAE):
 
         self.encoder = Encoder(input_dim=config.in_features, hidden_dim=config.hidden_features,
                                n_layers=config.n_layers)
-        self.codebook1 = CodeLayer(in_features=config.hidden_features,
-                                   embed_dim=config.embed_dim1,
-                                   embed_entries=config.embed_entries1,
-                                   temperature=config.temperature,
-                                   kld_scale=config.kld_scale,
-                                   straight_through=config.straight_through)
-        self.codebook2 = CodeLayer(in_features=config.hidden_features + config.in_features,
-                                   embed_dim=config.embed_dim2,
-                                   embed_entries=config.embed_entries2,
-                                   temperature=config.temperature,
-                                   kld_scale=config.kld_scale,
-                                   straight_through=config.straight_through)
-        self.codebook3 = CodeLayer(in_features=config.hidden_features + config.in_features,
-                                   embed_dim=config.embed_dim3,
-                                   embed_entries=config.embed_entries3,
-                                   temperature=config.temperature,
-                                   kld_scale=config.kld_scale,
-                                   straight_through=config.straight_through)
 
-        self.decoder1 = Decoder(input_dim=config.embed_dim1,
-                                hidden_dim=config.hidden_features,
-                                output_dim=config.in_features,
-                                n_layers=config.n_layers)
+        self.codebooks = nn.ModuleList([CodeLayer(in_features=config.hidden_features,
+                                                  embed_dim=config.embed_dim,
+                                                  embed_entries=config.embed_entries,
+                                                  temperature=config.temperature,
+                                                  kld_scale=config.kld_scale,
+                                                  straight_through=config.straight_through) for _ in
+                                        range(config.embed_channels)])
 
-        self.decoder2 = Decoder(input_dim=config.embed_dim2 + config.embed_dim1,
-                                hidden_dim=config.hidden_features,
-                                output_dim=config.in_features,
-                                n_layers=config.n_layers)
-
-        self.decoder3 = Decoder(input_dim=config.embed_dim3 + config.embed_dim2,
-                                hidden_dim=config.hidden_features,
-                                output_dim=config.in_features,
-                                n_layers=config.n_layers)
+        self.decoder = Decoder(input_dim=config.embed_channels * config.embed_dim,
+                               hidden_dim=config.hidden_features,
+                               output_dim=config.in_features,
+                               n_layers=config.n_layers)
         self.kld_scale = config.kld_scale
 
     def forward(self, x):
         encoder_output = self.encoder(x)
-        code_q1, code_d1, emb_id1 = self.codebook1(encoder_output)
-        decoder_output1 = self.decoder1(code_q1)
+        code_qs = list()
+        code_ds = list()
 
-        code_q2, code_d2, emb_id2 = self.codebook2(torch.cat([encoder_output, decoder_output1], axis=1))
-        decoder_output2 = self.decoder2(torch.cat([code_q2, code_q1], axis=1))
+        for codebook in self.codebooks:
+            code_q, code_d, emb_id = codebook(encoder_output)
+            code_qs.append(code_q)
+            code_ds.append(code_d)
 
-        code_q3, code_d3, emb_id3 = self.codebook3(torch.cat([encoder_output, decoder_output2], axis=1))
-        decoder_output3 = self.decoder3(torch.cat([code_q3, code_q2], axis=1))
+        decoder_output = self.decoder(torch.cat(code_qs, axis=1))
 
-        return decoder_output3, x, [code_d1, code_d2, code_d3]
-
-    def forward_debug(self, x):
-        encoder_output = self.encoder(x)
-        code_q1, code_d1, emb_id1 = self.codebook1(encoder_output)
-        decoder_output1 = self.decoder1(code_q1)
-
-        code_q2, code_d2, emb_id2 = self.codebook2(torch.cat([encoder_output, decoder_output1], axis=1))
-        decoder_output2 = self.decoder2(torch.cat([code_q2, code_q1], axis=1))
-
-        code_q3, code_d3, emb_id3 = self.codebook3(torch.cat([encoder_output, decoder_output2], axis=1))
-        decoder_output3 = self.decoder3(torch.cat([code_q3, code_q2], axis=1))
-
-        return decoder_output3, x, [code_d1, code_d2, code_d3], encoder_output, [emb_id1, emb_id2, emb_id3], \
-            [decoder_output1.detach(), decoder_output2.detach(), decoder_output3.detach()]
+        return decoder_output, x, code_ds
 
     def loss_function(self, *args) -> dict:
         recons = args[0]
